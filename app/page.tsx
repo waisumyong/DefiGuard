@@ -1,69 +1,168 @@
-import Image from "next/image";
+"use client";
+
+import { useState, type FormEvent, type ReactNode } from "react";
+
+// Placeholder result sections shown after "Analyze Swap" is clicked.
+// Real values will be filled in once the Jupiter integration and
+// risk engine are built.
+const RESULT_SECTIONS = [
+  "Expected Output",
+  "Best Route",
+  "Price Impact",
+  "Network Fee",
+  "Priority Fee",
+  "Slippage",
+  "Transaction Simulation",
+  "Risk Score",
+];
+
+const inputClasses =
+  "rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-accent focus:ring-1 focus:ring-accent";
 
 export default function Home() {
+  const [inputToken, setInputToken] = useState("SOL");
+  const [outputToken, setOutputToken] = useState("USDC");
+  const [amount, setAmount] = useState("");
+  const [hasAnalyzed, setHasAnalyzed] = useState(false);
+
+  const canAnalyze =
+    inputToken.trim() !== "" && outputToken.trim() !== "" && amount.trim() !== "";
+
+  function handleAnalyze(event: FormEvent) {
+    event.preventDefault();
+    if (!canAnalyze) return;
+    // No real analysis yet — this just reveals the placeholder panel.
+    setHasAnalyzed(true);
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="flex min-h-full flex-col items-center px-4 py-12 sm:px-8">
+      <div className="w-full max-w-2xl">
+        <header className="mb-10 flex flex-col items-center gap-3 text-center">
+          <div className="flex items-center gap-2">
+            <ShieldLogo />
+            <span className="text-2xl font-semibold tracking-tight text-foreground">
+              DeFiGuard
+            </span>
+          </div>
+          <p className="max-w-md text-sm text-muted-foreground">
+            Solana DeFi Transaction Risk & Cost Simulator
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        </header>
+
+        <form
+          onSubmit={handleAnalyze}
+          className="rounded-xl border border-border bg-card p-6 shadow-lg shadow-black/20"
+        >
+          <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-muted-foreground">
+            Swap Analysis
+          </h2>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Input Token">
+              <input
+                className={inputClasses}
+                value={inputToken}
+                onChange={(event) => setInputToken(event.target.value)}
+                placeholder="SOL"
+              />
+            </Field>
+            <Field label="Output Token">
+              <input
+                className={inputClasses}
+                value={outputToken}
+                onChange={(event) => setOutputToken(event.target.value)}
+                placeholder="USDC"
+              />
+            </Field>
+          </div>
+
+          <div className="mt-4">
+            <Field label="Amount">
+              <input
+                className={inputClasses}
+                type="number"
+                min="0"
+                step="any"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                placeholder="0.00"
+              />
+            </Field>
+          </div>
+
+          <button
+            type="submit"
+            disabled={!canAnalyze}
+            className="mt-6 w-full rounded-lg bg-accent py-3 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+            Analyze Swap
+          </button>
+        </form>
+
+        <section className="mt-8 rounded-xl border border-border bg-card p-6">
+          <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-muted-foreground">
+            Transaction Analysis
+          </h2>
+
+          {!hasAnalyzed ? (
+            <p className="text-sm text-muted-foreground">
+              Fill in the swap details above and click &ldquo;Analyze
+              Swap&rdquo; to see results here.
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {RESULT_SECTIONS.map((label) => (
+                <div
+                  key={label}
+                  className="rounded-lg border border-border bg-muted px-4 py-3"
+                >
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                  <p className="mt-1 text-sm font-medium text-foreground">—</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
     </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function ShieldLogo() {
+  return (
+    <svg
+      width="28"
+      height="28"
+      viewBox="0 0 24 24"
+      fill="none"
+      className="text-accent"
+      aria-hidden="true"
+    >
+      <path
+        d="M12 2 4 5v6c0 5 3.4 8.7 8 10 4.6-1.3 8-5 8-10V5l-8-3Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+        fill="currentColor"
+        fillOpacity="0.08"
+      />
+      <path
+        d="M9 12l2 2 4-4"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
