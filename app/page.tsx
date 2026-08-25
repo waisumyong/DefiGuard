@@ -3,12 +3,14 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { SUPPORTED_TOKENS, type TokenSymbol } from "@/app/lib/tokens";
 import { calculateRiskScore, type RiskResult } from "@/app/lib/risk";
+import {
+  calculatePreTradeChecks,
+  type CheckStatus,
+  type OverallStatus,
+  type SafetyChecksResult,
+} from "@/app/lib/safetyChecks";
 
 const TOKEN_OPTIONS = Object.keys(SUPPORTED_TOKENS) as TokenSymbol[];
-
-// Fields we don't have real data for yet. They stay on the panel so the
-// full shape of the analysis is visible, but clearly marked as pending.
-const NOT_IMPLEMENTED_SECTIONS = ["Transaction Simulation"];
 
 type Quote = {
   inputAmount: number;
@@ -34,6 +36,7 @@ export default function Home() {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [fees, setFees] = useState<Fees | null>(null);
   const [risk, setRisk] = useState<RiskResult | null>(null);
+  const [safety, setSafety] = useState<SafetyChecksResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,6 +49,7 @@ export default function Home() {
       setQuote(null);
       setFees(null);
       setRisk(null);
+      setSafety(null);
       return;
     }
 
@@ -54,6 +58,7 @@ export default function Home() {
     setQuote(null);
     setFees(null);
     setRisk(null);
+    setSafety(null);
 
     try {
       // The quote and the fee estimate are independent: fees don't
@@ -92,12 +97,24 @@ export default function Home() {
         .map((step: string) => step.trim())
         .filter(Boolean).length;
 
-      setRisk(
-        calculateRiskScore({
+      const riskResult = calculateRiskScore({
+        priceImpactPct: quoteData.priceImpactPct,
+        slippageBps: quoteData.slippageBps,
+        routeSteps: Math.max(routeSteps, 1),
+        priorityFeeMicroLamports: feesData?.priorityFeeMicroLamportsPerCu ?? null,
+      });
+      setRisk(riskResult);
+
+      // Pre-trade safety checks reuse the same quote/fee/risk data --
+      // no new API calls, and no transaction is built or simulated.
+      setSafety(
+        calculatePreTradeChecks({
+          outputAmount: quoteData.outputAmount,
+          route: quoteData.route,
           priceImpactPct: quoteData.priceImpactPct,
-          slippageBps: quoteData.slippageBps,
-          routeSteps: Math.max(routeSteps, 1),
-          priorityFeeMicroLamports: feesData?.priorityFeeMicroLamportsPerCu ?? null,
+          networkFeeSol: feesData?.networkFeeSol ?? null,
+          priorityFeeSol: feesData?.priorityFeeSol ?? null,
+          risk: riskResult,
         })
       );
     } catch {
@@ -250,9 +267,6 @@ export default function Home() {
                 value={risk ? `${risk.score}/100 — ${risk.level}` : "Unavailable"}
                 muted={!risk}
               />
-              {NOT_IMPLEMENTED_SECTIONS.map((label) => (
-                <ResultTile key={label} label={label} value="Not implemented yet" muted />
-              ))}
             </div>
           )}
 
@@ -266,6 +280,48 @@ export default function Home() {
                   <li key={reason}>• {reason}</li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {safety && (
+            <div className="mt-4 rounded-lg border border-border bg-muted px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Pre-Trade Safety Checks
+                </p>
+                <span
+                  className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${overallStatusClasses(
+                    safety.overallStatus
+                  )}`}
+                >
+                  {safety.overallStatus}
+                </span>
+              </div>
+
+              <ul className="mt-3 space-y-2">
+                {safety.checks.map((check) => (
+                  <li key={check.label} className="flex items-start gap-2 text-sm">
+                    <span
+                      className={`mt-0.5 shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${checkStatusClasses(
+                        check.status
+                      )}`}
+                    >
+                      {check.status}
+                    </span>
+                    <span>
+                      <span className="font-medium text-foreground">
+                        {check.label}:
+                      </span>{" "}
+                      <span className="text-muted-foreground">{check.detail}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+
+              <p className="mt-3 text-xs text-muted-foreground">
+                These checks analyze available quote, fee, and risk data. They
+                do not simulate or execute an on-chain transaction.
+              </p>
             </div>
           )}
         </section>
@@ -295,6 +351,28 @@ function ResultTile({
       </p>
     </div>
   );
+}
+
+function checkStatusClasses(status: CheckStatus): string {
+  switch (status) {
+    case "pass":
+      return "border-emerald-900/50 bg-emerald-950/40 text-emerald-300";
+    case "warning":
+      return "border-amber-900/50 bg-amber-950/40 text-amber-300";
+    case "unavailable":
+      return "border-border bg-muted text-muted-foreground";
+  }
+}
+
+function overallStatusClasses(status: OverallStatus): string {
+  switch (status) {
+    case "READY FOR REVIEW":
+      return "border-emerald-900/50 bg-emerald-950/40 text-emerald-300";
+    case "REVIEW CAUTION ADVISED":
+      return "border-amber-900/50 bg-amber-950/40 text-amber-300";
+    case "INCOMPLETE DATA":
+      return "border-border bg-muted text-muted-foreground";
+  }
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
