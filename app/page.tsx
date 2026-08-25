@@ -1,38 +1,87 @@
 "use client";
 
 import { useState, type FormEvent, type ReactNode } from "react";
+import { SUPPORTED_TOKENS, type TokenSymbol } from "@/app/lib/tokens";
 
-// Placeholder result sections shown after "Analyze Swap" is clicked.
-// Real values will be filled in once the Jupiter integration and
-// risk engine are built.
-const RESULT_SECTIONS = [
-  "Expected Output",
-  "Best Route",
-  "Price Impact",
-  "Network Fee",
-  "Priority Fee",
-  "Slippage",
-  "Transaction Simulation",
-  "Risk Score",
-];
+const TOKEN_OPTIONS = Object.keys(SUPPORTED_TOKENS) as TokenSymbol[];
+
+// Fields we don't have real data for yet. They stay on the panel so the
+// full shape of the analysis is visible, but clearly marked as pending.
+const NOT_IMPLEMENTED_SECTIONS = ["Transaction Simulation", "Risk Score"];
+
+type Quote = {
+  inputAmount: number;
+  outputAmount: number;
+  route: string;
+  priceImpactPct: number;
+  slippageBps: number;
+};
+
+type Fees = {
+  networkFeeSol: number;
+  priorityFeeSol: number | null;
+  priorityFeeMicroLamportsPerCu: number | null;
+};
 
 const inputClasses =
   "rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-accent focus:ring-1 focus:ring-accent";
 
 export default function Home() {
-  const [inputToken, setInputToken] = useState("SOL");
-  const [outputToken, setOutputToken] = useState("USDC");
+  const [inputToken, setInputToken] = useState<TokenSymbol>("SOL");
+  const [outputToken, setOutputToken] = useState<TokenSymbol>("USDC");
   const [amount, setAmount] = useState("");
-  const [hasAnalyzed, setHasAnalyzed] = useState(false);
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [fees, setFees] = useState<Fees | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const canAnalyze =
-    inputToken.trim() !== "" && outputToken.trim() !== "" && amount.trim() !== "";
-
-  function handleAnalyze(event: FormEvent) {
+  async function handleAnalyze(event: FormEvent) {
     event.preventDefault();
-    if (!canAnalyze) return;
-    // No real analysis yet — this just reveals the placeholder panel.
-    setHasAnalyzed(true);
+
+    const amountNumber = Number(amount);
+    if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
+      setError("Amount must be greater than 0.");
+      setQuote(null);
+      setFees(null);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setQuote(null);
+    setFees(null);
+
+    try {
+      // The quote and the fee estimate are independent: fees don't
+      // depend on the token pair or amount, so we fetch both at once.
+      const [quoteResponse, feesResponse] = await Promise.all([
+        fetch("/api/quote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ inputToken, outputToken, amount: amountNumber }),
+        }),
+        fetch("/api/fees"),
+      ]);
+
+      const quoteData = await quoteResponse.json();
+
+      if (!quoteResponse.ok) {
+        setError(quoteData.error ?? "Something went wrong fetching the quote.");
+        return;
+      }
+
+      setQuote(quoteData);
+
+      // Fee data is a nice-to-have alongside the quote -- if the RPC
+      // call fails, we still show the quote results.
+      if (feesResponse.ok) {
+        setFees(await feesResponse.json());
+      }
+    } catch {
+      setError("Could not reach the server. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -60,20 +109,34 @@ export default function Home() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Input Token">
-              <input
+              <select
                 className={inputClasses}
                 value={inputToken}
-                onChange={(event) => setInputToken(event.target.value)}
-                placeholder="SOL"
-              />
+                onChange={(event) =>
+                  setInputToken(event.target.value as TokenSymbol)
+                }
+              >
+                {TOKEN_OPTIONS.map((symbol) => (
+                  <option key={symbol} value={symbol}>
+                    {symbol}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="Output Token">
-              <input
+              <select
                 className={inputClasses}
                 value={outputToken}
-                onChange={(event) => setOutputToken(event.target.value)}
-                placeholder="USDC"
-              />
+                onChange={(event) =>
+                  setOutputToken(event.target.value as TokenSymbol)
+                }
+              >
+                {TOKEN_OPTIONS.map((symbol) => (
+                  <option key={symbol} value={symbol}>
+                    {symbol}
+                  </option>
+                ))}
+              </select>
             </Field>
           </div>
 
@@ -93,10 +156,10 @@ export default function Home() {
 
           <button
             type="submit"
-            disabled={!canAnalyze}
+            disabled={isLoading}
             className="mt-6 w-full rounded-lg bg-accent py-3 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Analyze Swap
+            {isLoading ? "Analyzing..." : "Analyze Swap"}
           </button>
         </form>
 
@@ -105,26 +168,90 @@ export default function Home() {
             Transaction Analysis
           </h2>
 
-          {!hasAnalyzed ? (
+          {error && (
+            <p className="mb-4 rounded-lg border border-red-900/50 bg-red-950/40 px-4 py-3 text-sm text-red-300">
+              {error}
+            </p>
+          )}
+
+          {!quote && !error && !isLoading && (
             <p className="text-sm text-muted-foreground">
               Fill in the swap details above and click &ldquo;Analyze
               Swap&rdquo; to see results here.
             </p>
-          ) : (
+          )}
+
+          {isLoading && (
+            <p className="text-sm text-muted-foreground">
+              Fetching quote and network fee data...
+            </p>
+          )}
+
+          {quote && (
             <div className="grid gap-3 sm:grid-cols-2">
-              {RESULT_SECTIONS.map((label) => (
-                <div
-                  key={label}
-                  className="rounded-lg border border-border bg-muted px-4 py-3"
-                >
-                  <p className="text-xs text-muted-foreground">{label}</p>
-                  <p className="mt-1 text-sm font-medium text-foreground">—</p>
-                </div>
+              <ResultTile
+                label="Expected Output"
+                value={`${quote.outputAmount.toFixed(6)} ${outputToken}`}
+              />
+              <ResultTile label="Best Route" value={quote.route} />
+              <ResultTile
+                label="Price Impact"
+                value={`${quote.priceImpactPct.toFixed(4)}%`}
+              />
+              <ResultTile
+                label="Slippage"
+                value={`${(quote.slippageBps / 100).toFixed(2)}%`}
+              />
+              <ResultTile
+                label="Network Fee"
+                value={
+                  fees
+                    ? `~${fees.networkFeeSol.toFixed(6)} SOL (estimate)`
+                    : "Unavailable"
+                }
+                muted={!fees}
+              />
+              <ResultTile
+                label="Priority Fee"
+                value={
+                  fees && fees.priorityFeeSol !== null
+                    ? `~${fees.priorityFeeSol.toFixed(6)} SOL (estimate, ${Math.round(
+                        fees.priorityFeeMicroLamportsPerCu ?? 0
+                      )} µ-lamports/CU)`
+                    : "Unavailable"
+                }
+                muted={!fees || fees.priorityFeeSol === null}
+              />
+              {NOT_IMPLEMENTED_SECTIONS.map((label) => (
+                <ResultTile key={label} label={label} value="Not implemented yet" muted />
               ))}
             </div>
           )}
         </section>
       </div>
+    </div>
+  );
+}
+
+function ResultTile({
+  label,
+  value,
+  muted = false,
+}: {
+  label: string;
+  value: string;
+  muted?: boolean;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-muted px-4 py-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p
+        className={`mt-1 text-sm font-medium ${
+          muted ? "text-muted-foreground" : "text-foreground"
+        }`}
+      >
+        {value}
+      </p>
     </div>
   );
 }
