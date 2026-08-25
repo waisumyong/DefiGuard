@@ -2,12 +2,13 @@
 
 import { useState, type FormEvent, type ReactNode } from "react";
 import { SUPPORTED_TOKENS, type TokenSymbol } from "@/app/lib/tokens";
+import { calculateRiskScore, type RiskResult } from "@/app/lib/risk";
 
 const TOKEN_OPTIONS = Object.keys(SUPPORTED_TOKENS) as TokenSymbol[];
 
 // Fields we don't have real data for yet. They stay on the panel so the
 // full shape of the analysis is visible, but clearly marked as pending.
-const NOT_IMPLEMENTED_SECTIONS = ["Transaction Simulation", "Risk Score"];
+const NOT_IMPLEMENTED_SECTIONS = ["Transaction Simulation"];
 
 type Quote = {
   inputAmount: number;
@@ -32,6 +33,7 @@ export default function Home() {
   const [amount, setAmount] = useState("");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [fees, setFees] = useState<Fees | null>(null);
+  const [risk, setRisk] = useState<RiskResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,6 +45,7 @@ export default function Home() {
       setError("Amount must be greater than 0.");
       setQuote(null);
       setFees(null);
+      setRisk(null);
       return;
     }
 
@@ -50,6 +53,7 @@ export default function Home() {
     setError(null);
     setQuote(null);
     setFees(null);
+    setRisk(null);
 
     try {
       // The quote and the fee estimate are independent: fees don't
@@ -74,9 +78,28 @@ export default function Home() {
 
       // Fee data is a nice-to-have alongside the quote -- if the RPC
       // call fails, we still show the quote results.
+      let feesData: Fees | null = null;
       if (feesResponse.ok) {
-        setFees(await feesResponse.json());
+        feesData = await feesResponse.json();
+        setFees(feesData);
       }
+
+      // Risk scoring only runs once we actually have a quote. Route
+      // "steps" is the number of hops in the "A -> B -> C" label the
+      // /api/quote route already builds.
+      const routeSteps = quoteData.route
+        .split("->")
+        .map((step: string) => step.trim())
+        .filter(Boolean).length;
+
+      setRisk(
+        calculateRiskScore({
+          priceImpactPct: quoteData.priceImpactPct,
+          slippageBps: quoteData.slippageBps,
+          routeSteps: Math.max(routeSteps, 1),
+          priorityFeeMicroLamports: feesData?.priorityFeeMicroLamportsPerCu ?? null,
+        })
+      );
     } catch {
       setError("Could not reach the server. Please try again.");
     } finally {
@@ -222,9 +245,27 @@ export default function Home() {
                 }
                 muted={!fees || fees.priorityFeeSol === null}
               />
+              <ResultTile
+                label="Risk Score"
+                value={risk ? `${risk.score}/100 — ${risk.level}` : "Unavailable"}
+                muted={!risk}
+              />
               {NOT_IMPLEMENTED_SECTIONS.map((label) => (
                 <ResultTile key={label} label={label} value="Not implemented yet" muted />
               ))}
+            </div>
+          )}
+
+          {risk && (
+            <div className="mt-4 rounded-lg border border-border bg-muted px-4 py-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                Risk Factors
+              </p>
+              <ul className="mt-2 space-y-1 text-sm text-foreground">
+                {risk.reasons.map((reason) => (
+                  <li key={reason}>• {reason}</li>
+                ))}
+              </ul>
             </div>
           )}
         </section>
