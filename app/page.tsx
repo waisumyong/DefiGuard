@@ -39,9 +39,14 @@ export default function Home() {
   const [safety, setSafety] = useState<SafetyChecksResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [feesNotice, setFeesNotice] = useState<string | null>(null);
 
   async function handleAnalyze(event: FormEvent) {
     event.preventDefault();
+
+    // Belt-and-suspenders alongside the disabled button: a keyboard
+    // Enter-to-submit can still fire while a request is in flight.
+    if (isLoading) return;
 
     const amountNumber = Number(amount);
     if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
@@ -55,38 +60,56 @@ export default function Home() {
 
     setIsLoading(true);
     setError(null);
+    setFeesNotice(null);
     setQuote(null);
     setFees(null);
     setRisk(null);
     setSafety(null);
 
+    // Kick off both requests immediately so they still run in
+    // parallel, but catch each independently -- otherwise a network
+    // failure on the fee request (not just a non-2xx response) would
+    // reject the whole Promise.all and wipe out a successful quote.
+    const quotePromise = fetch("/api/quote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ inputToken, outputToken, amount: amountNumber }),
+    }).catch(() => null);
+    const feesPromise = fetch("/api/fees").catch(() => null);
+
     try {
-      // The quote and the fee estimate are independent: fees don't
-      // depend on the token pair or amount, so we fetch both at once.
-      const [quoteResponse, feesResponse] = await Promise.all([
-        fetch("/api/quote", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ inputToken, outputToken, amount: amountNumber }),
-        }),
-        fetch("/api/fees"),
-      ]);
+      const quoteResponse = await quotePromise;
+      if (!quoteResponse) {
+        setError(
+          "Could not reach the server for the swap quote. Please try again."
+        );
+        return;
+      }
 
-      const quoteData = await quoteResponse.json();
+      const quoteData = await quoteResponse.json().catch(() => null);
 
-      if (!quoteResponse.ok) {
-        setError(quoteData.error ?? "Something went wrong fetching the quote.");
+      if (!quoteResponse.ok || !quoteData) {
+        setError(quoteData?.error ?? "Something went wrong fetching the quote.");
         return;
       }
 
       setQuote(quoteData);
 
-      // Fee data is a nice-to-have alongside the quote -- if the RPC
-      // call fails, we still show the quote results.
-      let feesData: Fees | null = null;
-      if (feesResponse.ok) {
-        feesData = await feesResponse.json();
+      // Fee data is a nice-to-have alongside the quote -- if it fails,
+      // we still show the quote results, with a notice instead of
+      // silently leaving the fee tiles blank.
+      const feesResponse = await feesPromise;
+      const feesData: Fees | null =
+        feesResponse && feesResponse.ok
+          ? await feesResponse.json().catch(() => null)
+          : null;
+
+      if (feesData) {
         setFees(feesData);
+      } else {
+        setFeesNotice(
+          "Fee data is temporarily unavailable. Quote and risk score are still shown below."
+        );
       }
 
       // Risk scoring only runs once we actually have a quote. Route
@@ -118,7 +141,7 @@ export default function Home() {
         })
       );
     } catch {
-      setError("Could not reach the server. Please try again.");
+      setError("Something went wrong while analyzing this swap. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -224,6 +247,12 @@ export default function Home() {
           {isLoading && (
             <p className="text-sm text-muted-foreground">
               Fetching quote and network fee data...
+            </p>
+          )}
+
+          {feesNotice && (
+            <p className="mb-4 rounded-lg border border-amber-900/50 bg-amber-950/40 px-4 py-3 text-sm text-amber-300">
+              {feesNotice}
             </p>
           )}
 
