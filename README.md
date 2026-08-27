@@ -75,5 +75,5 @@ Provides a final summary including:
 ### Clone the repository
 
 ```bash
-git clone <YOUR_GITHUB_REPOSITORY_URL>
+git clone https://github.com/waisumyong/DefiGuard.git
 cd DefiGuard
