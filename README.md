@@ -1,36 +1,99 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+🛡️ DeFiGuard
 
-## Getting Started
+A pre-trade analysis tool for Solana token swaps.
 
-First, run the development server:
+DeFiGuard helps users analyze a token swap before trading by showing live quote data, fees, price impact, risk signals, and pre-trade safety checks.
 
-```bash
+🚀 Features
+Live Swap Analysis
+Live expected output
+Best swap route
+Price impact
+Slippage information
+Fee Estimation
+Estimated Solana network fee
+Estimated priority fee
+Transparent Risk Scoring
+
+DeFiGuard uses transparent rule-based scoring based on:
+
+Price impact
+Slippage
+Route complexity
+Priority fee
+
+Risk levels:
+
+0–29   Low
+30–59  Medium
+60–100 High
+Pre-Trade Safety Checks
+
+Checks available data including:
+
+Valid swap quote
+Valid route
+Price impact
+Network fee data
+Priority fee data
+Risk score
+
+Possible results:
+
+READY FOR REVIEW
+REVIEW CAUTION ADVISED
+INCOMPLETE DATA
+Overall Analysis Summary
+
+Provides a final summary including:
+
+Overall risk level
+Risk score
+Best route
+Price impact
+Slippage
+Network and priority fees
+Pre-trade safety status
+🛠️ Tech Stack
+Next.js
+TypeScript
+React
+Tailwind CSS
+Jupiter API
+Solana RPC
+📦 Getting Started
+
+Clone the repository:
+
+git clone https://github.com/waisumyong/DefiGuard.git
+cd DefiGuard
+
+Install dependencies:
+
+npm install
+
+Create your environment file:
+
+cp .env.example .env.local
+
+Configure the required API keys in .env.local.
+
+Run the development server:
+
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+http://localhost:3000
+⚠️ Disclaimer
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+DeFiGuard provides pre-trade analysis only.
 
-## Learn More
+It does not:
 
-To learn more about Next.js, take a look at the following resources:
+Connect to a wallet
+Sign transactions
+Execute swaps
+Guarantee that a transaction will succeed on-chain
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Analysis is based on available quote, fee, and rule-based risk data.
