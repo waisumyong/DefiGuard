@@ -77,6 +77,7 @@ Provides a final summary including:
 ```bash
 git clone https://github.com/waisumyong/DefiGuard.git
 cd DefiGuard
+```
 
 ### Install dependencies
 
