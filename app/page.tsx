@@ -2,13 +2,18 @@
 
 import { useState, type FormEvent, type ReactNode } from "react";
 import { SUPPORTED_TOKENS, type TokenSymbol } from "@/app/lib/tokens";
-import { calculateRiskScore, type RiskResult } from "@/app/lib/risk";
+import {
+  calculateRiskScore,
+  type RiskLevel,
+  type RiskResult,
+} from "@/app/lib/risk";
 import {
   calculatePreTradeChecks,
   type CheckStatus,
   type OverallStatus,
   type SafetyChecksResult,
 } from "@/app/lib/safetyChecks";
+import { buildAnalysisSummary, type AnalysisSummary } from "@/app/lib/summary";
 
 const TOKEN_OPTIONS = Object.keys(SUPPORTED_TOKENS) as TokenSymbol[];
 
@@ -37,6 +42,7 @@ export default function Home() {
   const [fees, setFees] = useState<Fees | null>(null);
   const [risk, setRisk] = useState<RiskResult | null>(null);
   const [safety, setSafety] = useState<SafetyChecksResult | null>(null);
+  const [summary, setSummary] = useState<AnalysisSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feesNotice, setFeesNotice] = useState<string | null>(null);
@@ -55,6 +61,7 @@ export default function Home() {
       setFees(null);
       setRisk(null);
       setSafety(null);
+      setSummary(null);
       return;
     }
 
@@ -65,6 +72,7 @@ export default function Home() {
     setFees(null);
     setRisk(null);
     setSafety(null);
+    setSummary(null);
 
     // Kick off both requests immediately so they still run in
     // parallel, but catch each independently -- otherwise a network
@@ -130,14 +138,34 @@ export default function Home() {
 
       // Pre-trade safety checks reuse the same quote/fee/risk data --
       // no new API calls, and no transaction is built or simulated.
-      setSafety(
-        calculatePreTradeChecks({
-          outputAmount: quoteData.outputAmount,
-          route: quoteData.route,
-          priceImpactPct: quoteData.priceImpactPct,
-          networkFeeSol: feesData?.networkFeeSol ?? null,
-          priorityFeeSol: feesData?.priorityFeeSol ?? null,
+      const safetyResult = calculatePreTradeChecks({
+        outputAmount: quoteData.outputAmount,
+        route: quoteData.route,
+        priceImpactPct: quoteData.priceImpactPct,
+        networkFeeSol: feesData?.networkFeeSol ?? null,
+        priorityFeeSol: feesData?.priorityFeeSol ?? null,
+        risk: riskResult,
+      });
+      setSafety(safetyResult);
+
+      // Overall Analysis Summary combines the quote, fee, risk, and
+      // safety-check data above into one short verdict -- again, no
+      // new data fetched, no AI call, no transaction built.
+      setSummary(
+        buildAnalysisSummary({
+          quote: {
+            route: quoteData.route,
+            priceImpactPct: quoteData.priceImpactPct,
+            slippageBps: quoteData.slippageBps,
+          },
+          fees: feesData
+            ? {
+                networkFeeSol: feesData.networkFeeSol,
+                priorityFeeSol: feesData.priorityFeeSol,
+              }
+            : null,
           risk: riskResult,
+          safety: safetyResult,
         })
       );
     } catch {
@@ -353,6 +381,65 @@ export default function Home() {
               </p>
             </div>
           )}
+
+          {summary && quote && (
+            <div className="mt-4 rounded-lg border border-border bg-muted px-4 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Overall Analysis Summary
+                </p>
+                <span
+                  className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${summaryLevelClasses(
+                    summary.level
+                  )}`}
+                >
+                  {summary.headline}
+                </span>
+              </div>
+
+              <p className="mt-3 text-sm text-foreground">
+                {summary.recommendation}
+              </p>
+
+              <dl className="mt-3 grid gap-x-6 gap-y-1.5 text-xs sm:grid-cols-2">
+                <SummaryRow
+                  label="Risk score"
+                  value={`${risk?.score ?? "—"}/100 (${risk?.level ?? "Unavailable"})`}
+                />
+                <SummaryRow label="Best route" value={quote.route} />
+                <SummaryRow
+                  label="Price impact"
+                  value={`${quote.priceImpactPct.toFixed(4)}%`}
+                />
+                <SummaryRow
+                  label="Slippage"
+                  value={`${(quote.slippageBps / 100).toFixed(2)}%`}
+                />
+                <SummaryRow
+                  label="Network fee"
+                  value={
+                    fees ? `~${fees.networkFeeSol.toFixed(6)} SOL` : "Unavailable"
+                  }
+                />
+                <SummaryRow
+                  label="Priority fee"
+                  value={
+                    fees && fees.priorityFeeSol !== null
+                      ? `~${fees.priorityFeeSol.toFixed(6)} SOL`
+                      : "Unavailable"
+                  }
+                />
+                <SummaryRow
+                  label="Pre-trade checks"
+                  value={safety?.overallStatus ?? "Unavailable"}
+                />
+              </dl>
+
+              <p className="mt-3 text-xs text-muted-foreground">
+                {summary.disclaimer}
+              </p>
+            </div>
+          )}
         </section>
       </div>
     </div>
@@ -390,6 +477,26 @@ function checkStatusClasses(status: CheckStatus): string {
       return "border-amber-900/50 bg-amber-950/40 text-amber-300";
     case "unavailable":
       return "border-border bg-muted text-muted-foreground";
+  }
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 sm:justify-start">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="font-medium text-foreground">{value}</dd>
+    </div>
+  );
+}
+
+function summaryLevelClasses(level: RiskLevel): string {
+  switch (level) {
+    case "Low":
+      return "border-emerald-900/50 bg-emerald-950/40 text-emerald-300";
+    case "Medium":
+      return "border-amber-900/50 bg-amber-950/40 text-amber-300";
+    case "High":
+      return "border-red-900/50 bg-red-950/40 text-red-300";
   }
 }
 
