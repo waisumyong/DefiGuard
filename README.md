@@ -77,3 +77,42 @@ Provides a final summary including:
 ```bash
 git clone https://github.com/waisumyong/DefiGuard.git
 cd DefiGuard
+
+### Install dependencies
+
+```bash
+npm install
+```
+
+### Create your environment file
+
+```bash
+cp .env.example .env.local
+```
+
+Configure the required API keys in `.env.local`.
+
+### Run the development server
+
+```bash
+npm run dev
+```
+
+Open:
+
+```text
+http://localhost:3000
+```
+
+## ⚠️ Disclaimer
+
+DeFiGuard provides **pre-trade analysis only**.
+
+It does **not**:
+
+- Connect to a wallet
+- Sign transactions
+- Execute swaps
+- Guarantee that a transaction will succeed on-chain
+
+Analysis is based on available quote, fee, and rule-based risk data.
